@@ -32,7 +32,8 @@ interface DebugPanelConfig {
 
 // Default configuration - can be overridden by environment variables
 const DEFAULT_CONFIG: DebugPanelConfig = {
-  enabled: import.meta.env.DEV || import.meta.env.VITE_DEBUG_ENABLED === 'true',
+  enabled:
+    !import.meta.env.PROD && (import.meta.env.DEV || import.meta.env.VITE_DEBUG_ENABLED === 'true'),
   showRouteInfo: true,
   showConsoleLogs: true,
   showErrors: true,
@@ -51,18 +52,21 @@ function getConfig(): DebugPanelConfig {
 
   // Determine if enabled
   let enabled: boolean
+  const isProduction = import.meta.env.PROD || !import.meta.env.DEV
+
   if (explicitlyDisabled || localStorageDisabled) {
     // Explicitly disabled
     enabled = false
-  } else if (localStorageEnabled === 'true') {
-    // Explicitly enabled via localStorage
-    enabled = true
   } else if (import.meta.env.VITE_DEBUG_ENABLED === 'true') {
-    // Explicitly enabled via env var
+    // Explicitly enabled via env var (even in production if needed)
+    enabled = true
+  } else if (localStorageEnabled === 'true' && !isProduction) {
+    // Explicitly enabled via localStorage (only in dev mode, not in production)
     enabled = true
   } else {
     // Default: enabled in dev, disabled in production
-    enabled = import.meta.env.DEV
+    // In production builds, always disable unless explicitly enabled via VITE_DEBUG_ENABLED
+    enabled = !isProduction
   }
 
   return {
