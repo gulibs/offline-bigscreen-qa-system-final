@@ -1,0 +1,28 @@
+node_modules
+dist
+out
+openspec
+.DS_Store
+.eslintcache
+.cursor
+*.log*
+
+# Electron build artifacts
+*.exe
+*.dmg
+*.pkg
+*.AppImage
+*.deb
+*.rpm
+*.snap
+*.zip
+*.blockmap
+*.yml.bak
+
+# Build directories
+build/
+release/
+
+# Video assets (too large for Git, should be stored separately)
+*.mov
+*.avi

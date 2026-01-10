@@ -1,0 +1,130 @@
+{
+  "meta": {
+    "version": "1.0",
+    "totalQuestions": 20,
+    "description": "Sample Q&A questions for big screen touchscreen system"
+  },
+  "questions": [
+    {
+      "id": 1,
+      "text": "电子计算机的发明者是谁?",
+      "options": ["图灵", "冯·诺依曼", "爱因斯坦", "牛顿"],
+      "correctAnswer": 1
+    },
+    {
+      "id": 2,
+      "text": "世界上第一台电子计算机诞生于哪一年?",
+      "options": ["1942年", "1946年", "1950年", "1954年"],
+      "correctAnswer": 1
+    },
+    {
+      "id": 3,
+      "text": "以下哪个不是编程语言?",
+      "options": ["Python", "Java", "HTML", "C++"],
+      "correctAnswer": 2
+    },
+    {
+      "id": 4,
+      "text": "互联网的前身是什么?",
+      "options": ["ARPANET", "NSFNET", "Internet", "Ethernet"],
+      "correctAnswer": 0
+    },
+    {
+      "id": 5,
+      "text": "CPU的中文名称是?",
+      "options": ["中央处理器", "控制处理器", "计算处理器", "逻辑处理器"],
+      "correctAnswer": 0
+    },
+    {
+      "id": 6,
+      "text": "以下哪个是关系型数据库?",
+      "options": ["MongoDB", "Redis", "MySQL", "Neo4j"],
+      "correctAnswer": 2
+    },
+    {
+      "id": 7,
+      "text": "HTTP协议的默认端口是?",
+      "options": ["21", "22", "80", "443"],
+      "correctAnswer": 2
+    },
+    {
+      "id": 8,
+      "text": "以下哪个是操作系统?",
+      "options": ["Chrome", "Windows", "Excel", "Word"],
+      "correctAnswer": 1
+    },
+    {
+      "id": 9,
+      "text": "RAM的中文名称是?",
+      "options": ["只读存储器", "随机存储器", "硬盘存储器", "光盘存储器"],
+      "correctAnswer": 1
+    },
+    {
+      "id": 10,
+      "text": "二进制数10的十进制表示是?",
+      "options": ["1", "2", "10", "20"],
+      "correctAnswer": 1
+    },
+    {
+      "id": 11,
+      "text": "以下哪个是前端框架?",
+      "options": ["Django", "React", "Spring", "Flask"],
+      "correctAnswer": 1
+    },
+    {
+      "id": 12,
+      "text": "1KB等于多少字节?",
+      "options": ["100", "1000", "1024", "1048"],
+      "correctAnswer": 2
+    },
+    {
+      "id": 13,
+      "text": "以下哪个是版本控制工具?",
+      "options": ["Git", "npm", "Webpack", "Babel"],
+      "correctAnswer": 0
+    },
+    {
+      "id": 14,
+      "text": "URL的中文名称是?",
+      "options": ["统一资源定位符", "通用资源定位符", "网络资源定位符", "互联网资源定位符"],
+      "correctAnswer": 0
+    },
+    {
+      "id": 15,
+      "text": "以下哪个是云计算平台?",
+      "options": ["GitHub", "AWS", "Stack Overflow", "Reddit"],
+      "correctAnswer": 1
+    },
+    {
+      "id": 16,
+      "text": "TCP/IP协议属于哪一层?",
+      "options": ["应用层", "传输层", "网络层", "物理层"],
+      "correctAnswer": 1
+    },
+    {
+      "id": 17,
+      "text": "以下哪个是人工智能技术?",
+      "options": ["HTTP", "SQL", "机器学习", "HTML"],
+      "correctAnswer": 2
+    },
+    {
+      "id": 18,
+      "text": "IPv4地址由多少位组成?",
+      "options": ["16位", "32位", "64位", "128位"],
+      "correctAnswer": 1
+    },
+    {
+      "id": 19,
+      "text": "以下哪个是移动操作系统?",
+      "options": ["Linux", "macOS", "Android", "Unix"],
+      "correctAnswer": 2
+    },
+    {
+      "id": 20,
+      "text": "什么是开源软件?",
+      "options": ["源代码公开的软件", "免费的软件", "付费的软件", "商业软件"],
+      "correctAnswer": 0
+    }
+  ]
+}
+
