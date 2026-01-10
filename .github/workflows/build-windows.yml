@@ -1,0 +1,465 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: '构建版本类型（trial 试用版 或 release 正式版）'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - trial
+          - release
+      trial_duration:
+        description: '试用期时长（仅试用版需要，例如：5）'
+        required: false
+        default: '5'
+        type: string
+      trial_unit:
+        description: '试用期时间单位（仅试用版需要）'
+        required: false
+        default: 'minutes'
+        type: choice
+        options:
+          - seconds
+          - minutes
+          - hours
+          - days
+      device_fingerprint:
+        description: '【重要】设备指纹（64位十六进制字符串）。如果填写此字段，系统会自动生成设备绑定的激活码。仅适用于 release 版本。用户可以通过运行 scripts/get-device-fingerprint.js 或 scripts/get-device-fingerprint.ps1 获取设备指纹。'
+        required: false
+        default: ''
+        type: string
+      activation_code:
+        description: '【可选】手动输入激活码。如果上面已填写设备指纹，此字段留空即可（系统会自动生成）。如果两个都填写，优先使用手动输入的激活码。'
+        required: false
+        default: ''
+        type: string
+      enable_devtools:
+        description: '【测试用】是否启用 DevTools（控制台）。选择 true 可以打开控制台查看调试信息。仅用于测试，生产环境请选择 false。'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Get pnpm store directory
+        shell: pwsh
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $env:GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          # Remove existing node_modules to ensure clean install
+          if (Test-Path "node_modules") {
+            Write-Host "Removing existing node_modules for clean install..."
+            Remove-Item -Recurse -Force "node_modules" -ErrorAction SilentlyContinue
+          }
+
+          # Install with hoisted mode (node-linker=hoisted in .npmrc)
+          Write-Host "Installing dependencies with hoisted mode..."
+          pnpm install --no-frozen-lockfile
+
+          # Verify critical packages are in node_modules root
+          Write-Host "Verifying node_modules structure..."
+          $criticalPackages = @("app-builder-lib", "electron-builder", "builder-util")
+          foreach ($pkg in $criticalPackages) {
+            $pkgPath = "node_modules\$pkg"
+            if (Test-Path $pkgPath) {
+              Write-Host "✓ $pkg found in node_modules root"
+            } else {
+              Write-Warning "⚠ $pkg not found in node_modules root"
+              # Try to find it in .pnpm and create a hard link
+              $pnpmPath = Get-ChildItem -Path "node_modules\.pnpm" -Filter "$pkg@*" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($pnpmPath) {
+                $targetPath = Join-Path $pnpmPath.FullName "node_modules\$pkg"
+                if (Test-Path $targetPath) {
+                  Write-Host "Creating hard link for $pkg..."
+                  # Use robocopy to create junction (works better than symlink on Windows)
+                  $null = New-Item -ItemType Directory -Path "node_modules" -Force -ErrorAction SilentlyContinue
+                  cmd /c mklink /J "$pkgPath" "$targetPath" 2>&1 | Out-Null
+                }
+              }
+            }
+          }
+
+          # Verify electron-builder can find the files
+          Write-Host "Verifying electron-builder installation..."
+          pnpm exec electron-builder --version
+
+      - name: Type check
+        run: pnpm run typecheck
+        continue-on-error: false
+
+      - name: 生成设备绑定激活码（如果提供了设备指纹）
+        shell: pwsh
+        id: generate_code
+        run: |
+          $deviceFingerprint = "${{ github.event.inputs.device_fingerprint }}"
+          $edition = "${{ github.event.inputs.edition }}"
+
+          # Trim whitespace FIRST (before any checks)
+          if (-not [string]::IsNullOrEmpty($deviceFingerprint)) {
+            $originalLength = $deviceFingerprint.Length
+            $deviceFingerprint = $deviceFingerprint.Trim()
+            if ($originalLength -ne $deviceFingerprint.Length) {
+              Write-Host "⚠️  检测到设备指纹前后有空格，已自动去除" -ForegroundColor Yellow
+              Write-Host "   原始长度: $originalLength 字符" -ForegroundColor Gray
+              Write-Host "   去除后长度: $($deviceFingerprint.Length) 字符" -ForegroundColor Gray
+            }
+          }
+
+          # Debug: Show received values
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host "检查输入参数" -ForegroundColor Cyan
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host "构建版本 (edition): '$edition'" -ForegroundColor Yellow
+          if ($edition -ne 'release') {
+            Write-Host "  ⚠️  警告：设备绑定激活码仅适用于 'release' 版本！" -ForegroundColor Red
+          }
+          Write-Host ""
+          Write-Host "设备指纹 (device_fingerprint):" -ForegroundColor Yellow
+          if ([string]::IsNullOrEmpty($deviceFingerprint)) {
+            Write-Host "  [未提供或为空]" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "  💡 提示：" -ForegroundColor Cyan
+            Write-Host "     请确保将设备指纹输入到 'device_fingerprint' 输入框" -ForegroundColor White
+            Write-Host "     （不是 'activation_code' 输入框）" -ForegroundColor White
+          } else {
+            Write-Host "  ✓ 已提供" -ForegroundColor Green
+            Write-Host "  值: '$deviceFingerprint'" -ForegroundColor White
+            Write-Host "  长度: $($deviceFingerprint.Length) 字符" -ForegroundColor White
+            if ($deviceFingerprint.Length -ge 16) {
+              Write-Host "  前16位: $($deviceFingerprint.Substring(0, 16))" -ForegroundColor White
+            }
+            # Check for common issues
+            if ($deviceFingerprint -match '\s') {
+              Write-Host "  ⚠️  警告：检测到空格或换行符！" -ForegroundColor Red
+            }
+            if ($deviceFingerprint.Length -ne 64) {
+              Write-Host "  ⚠️  警告：长度不是64字符！" -ForegroundColor Red
+            }
+            if ($deviceFingerprint -notmatch '^[a-fA-F0-9]+$') {
+              Write-Host "  ⚠️  警告：包含非十六进制字符！" -ForegroundColor Red
+            }
+          }
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host ""
+
+          if (-not [string]::IsNullOrEmpty($deviceFingerprint) -and $edition -eq 'release') {
+            Write-Host "✓ 检测到设备指纹，开始生成激活码..." -ForegroundColor Green
+            Write-Host "  设备指纹: $($deviceFingerprint.Substring(0, 16))..." -ForegroundColor White
+
+            # Validate device fingerprint format (64 hex characters)
+            if ($deviceFingerprint.Length -ne 64 -or $deviceFingerprint -notmatch '^[a-fA-F0-9]{64}$') {
+              Write-Host ""
+              Write-Host "❌ 设备指纹格式错误！" -ForegroundColor Red
+              Write-Host "   期望格式：64位十六进制字符串（0-9, a-f, A-F）" -ForegroundColor Yellow
+              Write-Host "   实际值：$deviceFingerprint" -ForegroundColor White
+              Write-Host "   实际长度：$($deviceFingerprint.Length) 字符" -ForegroundColor White
+              Write-Host ""
+              Write-Host "   请检查：" -ForegroundColor Yellow
+              Write-Host "   1. 设备指纹必须是64个字符" -ForegroundColor White
+              Write-Host "   2. 只包含十六进制字符（0-9, a-f, A-F）" -ForegroundColor White
+              Write-Host "   3. 没有空格、换行或其他特殊字符" -ForegroundColor White
+              Write-Host "   4. 确保输入到 'device_fingerprint' 输入框，而不是 'activation_code'" -ForegroundColor White
+              Write-Host ""
+              Write-Host "   获取设备指纹的方法：" -ForegroundColor Cyan
+              Write-Host "   - 运行: node scripts/get-device-fingerprint.js" -ForegroundColor White
+              Write-Host "   - 或运行: powershell -ExecutionPolicy Bypass -File scripts\get-device-fingerprint.ps1" -ForegroundColor White
+              Write-Host ""
+              exit 1
+            }
+
+            # Generate device-bound activation code using Node.js script
+            Write-Host "正在生成设备绑定激活码..." -ForegroundColor Cyan
+            $output = node scripts/generate-device-bound-code.js $deviceFingerprint 2>&1 | Out-String
+
+            # Extract activation code from output (format: XXXX-XXXX-XXXX-XXXX)
+            # Try multiple patterns to match the output format
+            $activationCodeMatch = $null
+            $patterns = @(
+              'Activation Code:\s*([A-Z0-9-]{19})',
+              'Activation Code: ([A-Z0-9-]{19})',
+              'Activation Code:\s*([A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})'
+            )
+
+            foreach ($pattern in $patterns) {
+              $match = [regex]::Match($output, $pattern)
+              if ($match.Success) {
+                $activationCodeMatch = $match
+                break
+              }
+            }
+
+            if ($activationCodeMatch -and $activationCodeMatch.Success) {
+              $generatedActivationCode = $activationCodeMatch.Groups[1].Value
+              Write-Host "✓ 激活码生成成功: $generatedActivationCode" -ForegroundColor Green
+              "GENERATED_ACTIVATION_CODE=$generatedActivationCode" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            } else {
+              Write-Host ""
+              Write-Host "❌ 无法从生成器输出中提取激活码" -ForegroundColor Red
+              Write-Host "生成器输出：" -ForegroundColor Yellow
+              Write-Host $output
+              Write-Host ""
+              Write-Host "尝试的模式: $($patterns -join ', ')" -ForegroundColor Yellow
+              exit 1
+            }
+          } else {
+            Write-Host ""
+            Write-Host "============================================================" -ForegroundColor Yellow
+            Write-Host "跳过激活码生成" -ForegroundColor Yellow
+            Write-Host "============================================================" -ForegroundColor Yellow
+            if ([string]::IsNullOrEmpty($deviceFingerprint)) {
+              Write-Host "原因：未提供设备指纹" -ForegroundColor Red
+              Write-Host ""
+              Write-Host "💡 解决方法：" -ForegroundColor Cyan
+              Write-Host "   1. 在 GitHub Actions 的 'Run workflow' 页面" -ForegroundColor White
+              Write-Host "   2. 找到 'device_fingerprint' 输入框（在 'activation_code' 之前）" -ForegroundColor White
+              Write-Host "   3. 将设备指纹粘贴到该输入框" -ForegroundColor White
+              Write-Host "   4. 确保 'edition' 选择的是 'release'" -ForegroundColor White
+              Write-Host ""
+              Write-Host "   获取设备指纹的方法：" -ForegroundColor Yellow
+              Write-Host "   - 运行: node scripts/get-device-fingerprint.js" -ForegroundColor Gray
+              Write-Host "   - 或运行: powershell -ExecutionPolicy Bypass -File scripts\get-device-fingerprint.ps1" -ForegroundColor Gray
+            } elseif ($edition -ne 'release') {
+              Write-Host "原因：当前构建版本是 '$edition'，不是 'release'" -ForegroundColor Red
+              Write-Host ""
+              Write-Host "💡 解决方法：" -ForegroundColor Cyan
+              Write-Host "   设备绑定激活码仅适用于 release 版本" -ForegroundColor White
+              Write-Host "   请将 'edition' 选择为 'release'" -ForegroundColor White
+            }
+            Write-Host "============================================================" -ForegroundColor Yellow
+            Write-Host ""
+            "GENERATED_ACTIVATION_CODE=" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
+
+      - name: Set build environment variables
+        shell: pwsh
+        run: |
+          # Get edition from workflow_dispatch input
+          $edition = "${{ github.event.inputs.edition }}"
+          if ([string]::IsNullOrEmpty($edition)) {
+            $edition = 'release'
+          }
+
+          $trialDuration = "${{ github.event.inputs.trial_duration }}"
+          if ([string]::IsNullOrEmpty($trialDuration)) {
+            $trialDuration = '5'
+          }
+
+          $trialUnit = "${{ github.event.inputs.trial_unit }}"
+          if ([string]::IsNullOrEmpty($trialUnit)) {
+            $trialUnit = 'minutes'
+          }
+
+          # Priority: manually provided activation code > generated from device fingerprint > empty
+          $manualActivationCode = "${{ github.event.inputs.activation_code }}"
+          $generatedActivationCode = "${{ env.GENERATED_ACTIVATION_CODE }}"
+
+          $activationCode = $manualActivationCode
+          if ([string]::IsNullOrEmpty($activationCode) -and -not [string]::IsNullOrEmpty($generatedActivationCode)) {
+            $activationCode = $generatedActivationCode
+            Write-Host "Using generated device-bound activation code"
+          } elseif (-not [string]::IsNullOrEmpty($activationCode)) {
+            Write-Host "Using manually provided activation code"
+          }
+
+          # Get enable_devtools from workflow_dispatch input
+          $enableDevTools = "${{ github.event.inputs.enable_devtools }}"
+          if ([string]::IsNullOrEmpty($enableDevTools)) {
+            $enableDevTools = 'false'
+          }
+
+          Write-Host "Setting environment variables:"
+          Write-Host "  VITE_EDITION=$edition"
+          Write-Host "  VITE_TRIAL_DURATION=$trialDuration"
+          Write-Host "  VITE_TRIAL_UNIT=$trialUnit"
+          Write-Host "  VITE_ENABLE_DEVTOOLS=$enableDevTools"
+          if (-not [string]::IsNullOrEmpty($activationCode)) {
+            Write-Host "  VITE_ACTIVATION_CODE=*** (hidden)"
+          }
+
+          # Set environment variables for subsequent steps
+          "VITE_EDITION=$edition" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VITE_TRIAL_DURATION=$trialDuration" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VITE_TRIAL_UNIT=$trialUnit" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VITE_ENABLE_DEVTOOLS=$enableDevTools" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          if (-not [string]::IsNullOrEmpty($activationCode)) {
+            "VITE_ACTIVATION_CODE=$activationCode" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
+
+          if ($edition -eq 'trial') {
+            Write-Host "Building TRIAL edition with duration: $trialDuration $trialUnit"
+          } else {
+            if (-not [string]::IsNullOrEmpty($activationCode)) {
+              $deviceFingerprint = "${{ github.event.inputs.device_fingerprint }}"
+              if (-not [string]::IsNullOrEmpty($deviceFingerprint)) {
+                Write-Host "Building RELEASE edition with device-bound activation code (fingerprint: $($deviceFingerprint.Substring(0, 16))...)"
+              } else {
+                Write-Host "Building RELEASE edition with activation code"
+              }
+            } else {
+              Write-Host "Building RELEASE edition (no activation code - will require activation on first run)"
+            }
+          }
+
+      - name: Build application and Windows installer
+        shell: pwsh
+        run: |
+          $edition = "${{ env.VITE_EDITION }}"
+          $trialDuration = "${{ env.VITE_TRIAL_DURATION }}"
+          $trialUnit = "${{ env.VITE_TRIAL_UNIT }}"
+
+          $activationCode = "${{ env.VITE_ACTIVATION_CODE }}"
+
+          Write-Host "Building with environment variables:"
+          Write-Host "  VITE_EDITION=$edition"
+          Write-Host "  VITE_TRIAL_DURATION=$trialDuration"
+          Write-Host "  VITE_TRIAL_UNIT=$trialUnit"
+          if (-not [string]::IsNullOrEmpty($activationCode)) {
+            Write-Host "  VITE_ACTIVATION_CODE=*** (hidden)"
+          }
+
+          # Verify environment variables are set
+          if ([string]::IsNullOrEmpty($edition)) {
+            Write-Error "VITE_EDITION is not set!"
+            exit 1
+          }
+
+          # Run typecheck first
+          pnpm run typecheck
+
+          # Build with electron-vite (environment variables are passed via env: section below)
+          # The define config in electron.vite.config.ts will read these at build time
+          pnpm exec electron-vite build
+
+          # Verify the build output contains the correct edition
+          $builtFile = "out/main/index.js"
+          if (Test-Path $builtFile) {
+            $content = Get-Content $builtFile -Raw
+            if ($edition -eq "trial") {
+              if ($content -notmatch '"trial"') {
+                Write-Warning "Warning: Built file may not contain 'trial' edition"
+              }
+            } else {
+              if ($content -notmatch '"release"') {
+                Write-Warning "Warning: Built file may not contain 'release' edition"
+              }
+            }
+          }
+
+          # Build Windows installer
+          # Set NODE_OPTIONS to handle long paths on Windows
+          $env:NODE_OPTIONS = "--max-old-space-size=4096"
+
+          # Final check before building
+          $appBuilderLibPath = "node_modules\app-builder-lib"
+          if (-not (Test-Path $appBuilderLibPath)) {
+            Write-Error "app-builder-lib not found in node_modules root. Build will fail."
+            exit 1
+          }
+
+          # Verify the NSIS template file exists
+          $nsisTemplatePath = Join-Path $appBuilderLibPath "templates\nsis\include\allowOnlyOneInstallerInstance.nsh"
+          if (Test-Path $nsisTemplatePath) {
+            Write-Host "✓ NSIS template found: $nsisTemplatePath"
+          } else {
+            Write-Warning "⚠ NSIS template not found at expected path"
+            Write-Host "Searching for template file..."
+            $foundTemplate = Get-ChildItem -Path "node_modules" -Filter "allowOnlyOneInstallerInstance.nsh" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($foundTemplate) {
+              Write-Host "Found template at: $($foundTemplate.FullName)"
+            } else {
+              Write-Error "NSIS template file not found anywhere!"
+              exit 1
+            }
+          }
+
+          # Run electron-builder
+          Write-Host "Starting electron-builder..."
+          pnpm exec electron-builder --win
+        env:
+          VITE_EDITION: ${{ env.VITE_EDITION }}
+          VITE_TRIAL_DURATION: ${{ env.VITE_TRIAL_DURATION }}
+          VITE_TRIAL_UNIT: ${{ env.VITE_TRIAL_UNIT }}
+          VITE_ACTIVATION_CODE: ${{ env.VITE_ACTIVATION_CODE }}
+          VITE_ENABLE_DEVTOOLS: ${{ env.VITE_ENABLE_DEVTOOLS }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: List build artifacts
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path dist -Recurse | Select-Object FullName, Length | Format-Table
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-${{ env.VITE_EDITION }}-${{ github.sha }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/*.blockmap
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: 显示生成的激活码（如果从设备指纹自动生成）
+        shell: pwsh
+        if: env.GENERATED_ACTIVATION_CODE != ''
+        run: |
+          $deviceFingerprint = "${{ github.event.inputs.device_fingerprint }}"
+          $activationCode = "${{ env.GENERATED_ACTIVATION_CODE }}"
+
+          Write-Host ""
+          Write-Host "============================================================" -ForegroundColor Green
+          Write-Host "设备绑定激活码已生成" -ForegroundColor Green
+          Write-Host "============================================================" -ForegroundColor Green
+          Write-Host "设备指纹: $($deviceFingerprint.Substring(0, 16))...$($deviceFingerprint.Substring(48))" -ForegroundColor White
+          Write-Host "激活码: $activationCode" -ForegroundColor Yellow
+          Write-Host "============================================================" -ForegroundColor Green
+          Write-Host ""
+          Write-Host "⚠️  重要：请保存此激活码！" -ForegroundColor Yellow
+          Write-Host "   此激活码已绑定到指定设备。" -ForegroundColor White
+          Write-Host "   只能在该设备上使用，无法在其他设备上激活。" -ForegroundColor White
+          Write-Host ""
+          Write-Host "📋 下一步操作：" -ForegroundColor Cyan
+          Write-Host "   1. 从 artifacts 下载安装包" -ForegroundColor White
+          Write-Host "   2. 将安装包和激活码发送给用户" -ForegroundColor White
+          Write-Host "   3. 用户安装软件并输入激活码" -ForegroundColor White
+          Write-Host ""
+
+      # Note: Release creation is now manual only
+      # To create a release, use GitHub's web interface or GitHub CLI after downloading artifacts
