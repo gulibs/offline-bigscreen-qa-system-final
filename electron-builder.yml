@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: offline-bigscreen-qa-system
+productName: 互动答题
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: offline-bigscreen-qa-system
+  executableName: 互动答题
   # Use PNG file - electron-builder will automatically convert to ICO
   # If build/icon.ico doesn't work, try resources/icon.png
   icon: resources/icon.png

@@ -32,10 +32,24 @@ pnpm run get:device-fingerprint
 powershell -ExecutionPolicy Bypass -File scripts\get-device-fingerprint.ps1
 ```
 
+**使用 Bash/Shell 脚本（Linux/macOS，无需 Node.js）：**
+
+```bash
+# 在终端中运行
+bash scripts/get-device-fingerprint.sh
+
+# 或者添加执行权限后直接运行
+chmod +x scripts/get-device-fingerprint.sh
+./scripts/get-device-fingerprint.sh
+
+# 显示调试信息
+bash scripts/get-device-fingerprint.sh --debug
+```
+
 **⚠️ 重要提示**：
-- 脚本必须保存为文件并作为文件运行
-- **不要**将脚本内容直接粘贴到 PowerShell 命令行中
+- PowerShell 脚本必须保存为文件并作为文件运行，**不要**将脚本内容直接粘贴到 PowerShell 命令行中
 - PowerShell 脚本会自动将设备指纹复制到剪贴板
+- Bash/Shell 脚本在 Linux/macOS 上会自动尝试复制到剪贴板（如果系统支持）
 
 #### 方式 2：从激活界面获取（需要先安装软件）
 
@@ -142,8 +156,9 @@ VITE_ACTIVATION_CODE=A1B2-C3D4-E5F6-G7H8 pnpm run build:release:win:activate
 ## 相关文件
 
 - `scripts/generate-device-bound-code.js` - 设备绑定激活码生成脚本
-- `scripts/get-device-fingerprint.js` - 设备指纹获取脚本（Node.js）
+- `scripts/get-device-fingerprint.js` - 设备指纹获取脚本（Node.js，跨平台）
 - `scripts/get-device-fingerprint.ps1` - 设备指纹获取脚本（PowerShell，Windows）
+- `scripts/get-device-fingerprint.sh` - 设备指纹获取脚本（Bash/Shell，Linux/macOS）
 - `src/main/license/licenseValidator.ts` - 激活码验证逻辑
 - `src/main/license/deviceFingerprint.ts` - 设备指纹生成
 - `.github/workflows/build-windows.yml` - GitHub Actions 构建配置
