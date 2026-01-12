@@ -75,6 +75,17 @@ export function AuthProvider({ children }: { children: ReactNode }): React.JSX.E
     // Redirect to login if on admin page
     if (location.pathname.startsWith('/admin')) {
       navigate('/admin/login', { replace: true })
+      // CRITICAL FIX: Force window focus after logout navigation
+      // This is essential on Windows where window focus can be lost after navigation
+      // Use setTimeout to ensure navigation completes before focusing
+      setTimeout(() => {
+        // Force window focus using Electron API (more reliable than window.focus())
+        if (window.api?.focusWindow) {
+          void window.api.focusWindow()
+        } else {
+          window.focus()
+        }
+      }, 100)
     }
   }, [navigate, location.pathname])
 

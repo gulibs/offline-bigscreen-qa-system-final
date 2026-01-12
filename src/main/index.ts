@@ -48,6 +48,7 @@ function createWindow(): void {
     y: display.bounds.y,
     frame: true,
     roundedCorners: false,
+    focusable: true,
     show: false, // 先不显示，等页面加载完成后再显示
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {

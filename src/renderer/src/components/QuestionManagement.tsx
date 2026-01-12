@@ -112,9 +112,10 @@ export function QuestionManagement(): React.JSX.Element {
   }
 
   const handleLogout = (): void => {
-    if (confirm('确定要退出登录吗？')) {
-      logout()
-    }
+    // CRITICAL FIX: Do NOT use window.confirm() in Electron!
+    // window.confirm() breaks input focus on Windows (Electron bug #31917)
+    // Direct logout - window focus is handled by AuthContext
+    logout()
   }
 
   const handleAdd = (): void => {

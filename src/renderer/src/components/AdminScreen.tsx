@@ -26,9 +26,11 @@ export function AdminScreen(): React.JSX.Element {
   }
 
   const handleLogout = (): void => {
-    if (confirm('确定要退出登录吗？')) {
-      logout()
-    }
+    // CRITICAL FIX: Do NOT use window.confirm() in Electron!
+    // window.confirm() and window.alert() break input focus on Windows
+    // This is a known Electron bug: https://github.com/electron/electron/issues/31917
+    // Direct logout without confirmation dialog
+    logout()
   }
 
   return (
