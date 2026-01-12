@@ -31,35 +31,68 @@ export function LoginScreen(): React.JSX.Element {
   }, [isAuthenticated, navigate, location.state])
 
   // Reset state and focus input when login page becomes visible
-  // Critical: In Electron, window must be focused before input can receive focus
-  // Use two-layer requestAnimationFrame to ensure proper sequencing:
-  // 1. First frame: Request OS-level window focus
-  // 2. Second frame: Focus input after window activation
+  // Critical: In Electron on Windows, window focus management requires special handling
+  // Windows-specific issue: Input fields may not respond to clicks if window isn't properly focused
+  // Solution: Use multiple layers of requestAnimationFrame + setTimeout for Windows
   useEffect(() => {
     if (location.pathname === '/admin/login') {
       setIsLoading(false)
       setPassword('')
       setError(null)
 
+      // Windows-specific: Use longer delay and multiple attempts
+      const focusInput = (): void => {
+        const input = passwordInputRef.current
+        if (input) {
+          // Windows workaround: Blur first to reset focus state, then focus
+          input.blur()
+          // Use setTimeout for Windows to ensure DOM is ready
+          setTimeout(() => {
+            input.focus()
+            // Verify focus was set
+            if (document.activeElement !== input) {
+              // Retry once more for Windows
+              setTimeout(() => {
+                input.focus()
+              }, 50)
+            }
+          }, 10)
+        }
+      }
+
       requestAnimationFrame(() => {
         // First: Ensure BrowserWindow has OS-level focus
         // Without this, Chromium will reject all input focus attempts
         const ensureWindowFocus = async (): Promise<void> => {
           if (!document.hasFocus()) {
-            // Try using Electron API first (more reliable in multi-monitor scenarios)
+            // Try using Electron API first (more reliable, especially on Windows)
             if (window.api?.focusWindow) {
               await window.api.focusWindow()
+              // Windows-specific: Additional delay after window focus
+              if (navigator.platform.includes('Win')) {
+                await new Promise((resolve) => setTimeout(resolve, 50))
+              }
             } else {
               // Fallback to standard window.focus()
               window.focus()
+              if (navigator.platform.includes('Win')) {
+                await new Promise((resolve) => setTimeout(resolve, 50))
+              }
             }
           }
         }
 
         void ensureWindowFocus().then(() => {
           // Second: Focus input after window activation
+          // Windows needs additional frame for proper focus
           requestAnimationFrame(() => {
-            passwordInputRef.current?.focus()
+            if (navigator.platform.includes('Win')) {
+              // Windows: Use setTimeout for more reliable focus
+              setTimeout(focusInput, 50)
+            } else {
+              // Other platforms: Use requestAnimationFrame
+              requestAnimationFrame(focusInput)
+            }
           })
         })
       })
@@ -88,16 +121,37 @@ export function LoginScreen(): React.JSX.Element {
         requestAnimationFrame(async () => {
           // Ensure window has focus before focusing input
           if (!document.hasFocus()) {
-            // Try using Electron API first (more reliable)
+            // Try using Electron API first (more reliable, especially on Windows)
             if (window.api?.focusWindow) {
               await window.api.focusWindow()
+              // Windows-specific: Additional delay after window focus
+              if (navigator.platform.includes('Win')) {
+                await new Promise((resolve) => setTimeout(resolve, 50))
+              }
             } else {
               // Fallback to standard window.focus()
               window.focus()
+              if (navigator.platform.includes('Win')) {
+                await new Promise((resolve) => setTimeout(resolve, 50))
+              }
             }
           }
+
+          // Focus input with Windows-specific handling
           requestAnimationFrame(() => {
-            passwordInputRef.current?.focus()
+            const input = passwordInputRef.current
+            if (input) {
+              if (navigator.platform.includes('Win')) {
+                // Windows workaround: Blur first, then focus with delay
+                input.blur()
+                setTimeout(() => {
+                  input.focus()
+                }, 10)
+              } else {
+                // Other platforms: Direct focus
+                input.focus()
+              }
+            }
           })
         })
       }

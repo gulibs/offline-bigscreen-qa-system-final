@@ -723,14 +723,32 @@ app.whenReady().then(() => {
   })
 
   // IPC: Focus window (for Electron window focus management)
+  // Windows-specific fix: On Windows, focus() may not bring window to front
+  // Solution: Use show() + focus() + setFocusable(true) combination
   ipcMain.handle('focus-window', async () => {
     const window = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
     if (window && !window.isDestroyed()) {
-      // Show window if hidden, then focus
+      // Windows-specific: Ensure window is focusable
+      if (process.platform === 'win32') {
+        window.setFocusable(true)
+      }
+
+      // Show window if hidden
       if (!window.isVisible()) {
         window.show()
       }
+
+      // Windows-specific: On Windows, need to call show() before focus()
+      // to ensure window comes to front
+      if (process.platform === 'win32') {
+        window.show()
+        // Small delay to ensure show() completes before focus()
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+
+      // Focus the window
       window.focus()
+
       return true
     }
     return false
