@@ -31,20 +31,34 @@ export function LoginScreen(): React.JSX.Element {
   }, [isAuthenticated, navigate, location.state])
 
   // Focus password input on mount and when component becomes visible
-  // Use setTimeout to ensure DOM is fully rendered, especially after logout
+  // Use multiple strategies to ensure DOM is fully rendered, especially after logout
   useEffect(() => {
     // Only focus if not authenticated (i.e., we're on the login screen)
     if (!isAuthenticated) {
-      // Use requestAnimationFrame + setTimeout to ensure DOM is ready
-      const focusTimer = setTimeout(() => {
-        passwordInputRef.current?.focus()
-      }, 100)
+      // Use requestAnimationFrame to wait for next paint, then setTimeout for DOM stability
+      // This ensures the input is fully rendered and focusable, especially after logout
+      const focusInput = (): void => {
+        const input = passwordInputRef.current
+        if (input) {
+          // Check if input is actually visible and focusable
+          if (input.offsetParent !== null && !input.disabled) {
+            input.focus()
+          } else {
+            // If not ready, try again after a short delay
+            setTimeout(focusInput, 50)
+          }
+        }
+      }
 
-      return () => clearTimeout(focusTimer)
+      // Use requestAnimationFrame to wait for next paint cycle
+      requestAnimationFrame(() => {
+        // Then use setTimeout to ensure DOM is stable
+        setTimeout(focusInput, 100)
+      })
+
+      // No cleanup needed - we want the focus to happen
     }
-    // Return undefined cleanup function when authenticated (no cleanup needed)
-    return undefined
-  }, [isAuthenticated, location.pathname]) // Re-focus when pathname changes or auth state changes
+  }, [isAuthenticated]) // Re-focus when auth state changes (e.g., after logout)
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
@@ -60,10 +74,15 @@ export function LoginScreen(): React.JSX.Element {
       } else {
         setError('密码错误，请重试')
         setPassword('')
-        // Use setTimeout to ensure focus after state update
-        setTimeout(() => {
-          passwordInputRef.current?.focus()
-        }, 0)
+        // Use requestAnimationFrame + setTimeout to ensure focus after state update
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            const input = passwordInputRef.current
+            if (input && input.offsetParent !== null && !input.disabled) {
+              input.focus()
+            }
+          }, 50)
+        })
       }
     } catch (err) {
       setError('登录失败，请重试')
