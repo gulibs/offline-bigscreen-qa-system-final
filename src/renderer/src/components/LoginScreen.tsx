@@ -30,10 +30,21 @@ export function LoginScreen(): React.JSX.Element {
     }
   }, [isAuthenticated, navigate, location.state])
 
-  // Focus password input on mount
+  // Focus password input on mount and when component becomes visible
+  // Use setTimeout to ensure DOM is fully rendered, especially after logout
   useEffect(() => {
-    passwordInputRef.current?.focus()
-  }, [])
+    // Only focus if not authenticated (i.e., we're on the login screen)
+    if (!isAuthenticated) {
+      // Use requestAnimationFrame + setTimeout to ensure DOM is ready
+      const focusTimer = setTimeout(() => {
+        passwordInputRef.current?.focus()
+      }, 100)
+
+      return () => clearTimeout(focusTimer)
+    }
+    // Return undefined cleanup function when authenticated (no cleanup needed)
+    return undefined
+  }, [isAuthenticated, location.pathname]) // Re-focus when pathname changes or auth state changes
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
@@ -49,7 +60,10 @@ export function LoginScreen(): React.JSX.Element {
       } else {
         setError('密码错误，请重试')
         setPassword('')
-        passwordInputRef.current?.focus()
+        // Use setTimeout to ensure focus after state update
+        setTimeout(() => {
+          passwordInputRef.current?.focus()
+        }, 0)
       }
     } catch (err) {
       setError('登录失败，请重试')
