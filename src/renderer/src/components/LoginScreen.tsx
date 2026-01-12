@@ -31,7 +31,10 @@ export function LoginScreen(): React.JSX.Element {
   }, [isAuthenticated, navigate, location.state])
 
   // Reset state and focus input when login page becomes visible
-  // Use useEffect + requestAnimationFrame for stable focus in Electron
+  // Critical: In Electron, window must be focused before input can receive focus
+  // Use two-layer requestAnimationFrame to ensure proper sequencing:
+  // 1. First frame: Request OS-level window focus
+  // 2. Second frame: Focus input after window activation
   useEffect(() => {
     if (location.pathname === '/admin/login') {
       setIsLoading(false)
@@ -39,7 +42,26 @@ export function LoginScreen(): React.JSX.Element {
       setError(null)
 
       requestAnimationFrame(() => {
-        passwordInputRef.current?.focus()
+        // First: Ensure BrowserWindow has OS-level focus
+        // Without this, Chromium will reject all input focus attempts
+        const ensureWindowFocus = async (): Promise<void> => {
+          if (!document.hasFocus()) {
+            // Try using Electron API first (more reliable in multi-monitor scenarios)
+            if (window.api?.focusWindow) {
+              await window.api.focusWindow()
+            } else {
+              // Fallback to standard window.focus()
+              window.focus()
+            }
+          }
+        }
+
+        void ensureWindowFocus().then(() => {
+          // Second: Focus input after window activation
+          requestAnimationFrame(() => {
+            passwordInputRef.current?.focus()
+          })
+        })
       })
     }
   }, [location.pathname])
@@ -63,8 +85,20 @@ export function LoginScreen(): React.JSX.Element {
       } else {
         setError('密码错误，请重试')
         setPassword('')
-        requestAnimationFrame(() => {
-          passwordInputRef.current?.focus()
+        requestAnimationFrame(async () => {
+          // Ensure window has focus before focusing input
+          if (!document.hasFocus()) {
+            // Try using Electron API first (more reliable)
+            if (window.api?.focusWindow) {
+              await window.api.focusWindow()
+            } else {
+              // Fallback to standard window.focus()
+              window.focus()
+            }
+          }
+          requestAnimationFrame(() => {
+            passwordInputRef.current?.focus()
+          })
         })
       }
     } catch (err) {

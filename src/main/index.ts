@@ -722,6 +722,20 @@ app.whenReady().then(() => {
     return window ? window.isFullScreen() : false
   })
 
+  // IPC: Focus window (for Electron window focus management)
+  ipcMain.handle('focus-window', async () => {
+    const window = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+    if (window && !window.isDestroyed()) {
+      // Show window if hidden, then focus
+      if (!window.isVisible()) {
+        window.show()
+      }
+      window.focus()
+      return true
+    }
+    return false
+  })
+
   // IPC: Database operations - Categories
   ipcMain.handle('db:getCategories', async () => {
     try {

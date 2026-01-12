@@ -5,6 +5,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 const api = {
   toggleFullscreen: () => ipcRenderer.invoke('toggle-fullscreen'),
   isFullscreen: () => ipcRenderer.invoke('is-fullscreen'),
+  focusWindow: () => ipcRenderer.invoke('focus-window'), // Focus BrowserWindow (Electron-specific)
   notifyAppReady: () => ipcRenderer.send('app-ready'), // Notify main process when React app is ready
   // Database APIs
   db: {

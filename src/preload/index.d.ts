@@ -9,6 +9,7 @@ declare global {
     api: {
       toggleFullscreen: () => Promise<boolean>
       isFullscreen: () => Promise<boolean>
+      focusWindow: () => Promise<boolean>
       notifyAppReady: () => void
       db: {
         getCategories: () => Promise<Category[]>
