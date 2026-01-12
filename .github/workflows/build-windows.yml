@@ -123,6 +123,50 @@ jobs:
         run: pnpm run typecheck
         continue-on-error: false
 
+      - name: Generate Windows ICO icon
+        shell: pwsh
+        run: |
+          Write-Host "============================================================" -ForegroundColor Cyan
+          Write-Host "Generating Windows ICO icon from PNG..." -ForegroundColor Cyan
+          Write-Host "============================================================" -ForegroundColor Cyan
+          
+          # Ensure build directory exists
+          if (-not (Test-Path "build")) {
+            New-Item -ItemType Directory -Path "build" | Out-Null
+            Write-Host "✓ Created build directory" -ForegroundColor Green
+          }
+          
+          # Verify input PNG exists
+          if (-not (Test-Path "resources\icon.png")) {
+            Write-Error "❌ Input icon not found: resources\icon.png"
+            exit 1
+          }
+          
+          # Generate ICO file with multiple sizes for better Windows display
+          Write-Host "Running icon generation script..." -ForegroundColor Yellow
+          node scripts/generate-windows-icon.js
+          
+          # Verify ICO file was created
+          if (Test-Path "build\icon.ico") {
+            $icoFile = Get-Item "build\icon.ico"
+            $icoSize = $icoFile.Length
+            Write-Host ""
+            Write-Host "✓ ICO file generated successfully!" -ForegroundColor Green
+            Write-Host "  Path: build\icon.ico" -ForegroundColor White
+            Write-Host "  Size: $([math]::Round($icoSize/1KB, 2)) KB" -ForegroundColor White
+            Write-Host "============================================================" -ForegroundColor Cyan
+          } else {
+            Write-Error ""
+            Write-Error "❌ ICO file generation failed!"
+            Write-Error "   Expected file: build\icon.ico"
+            Write-Error "   Please check the script output above for errors."
+            Write-Error ""
+            Write-Error "   Make sure the following packages are installed:"
+            Write-Error "   - sharp: pnpm add -D sharp"
+            Write-Error "   - to-ico: pnpm add -D to-ico"
+            exit 1
+          }
+
       - name: 生成设备绑定激活码（如果提供了设备指纹）
         shell: pwsh
         id: generate_code

@@ -3,7 +3,7 @@
  * Admin login page with password authentication
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router'
 import { Icon } from '@iconify/react'
 import lockIcon from '@iconify-icons/mdi/lock'
@@ -21,6 +21,15 @@ export function LoginScreen(): React.JSX.Element {
   const passwordInputRef = useRef<HTMLInputElement>(null)
   const { login, isAuthenticated } = useAuth()
 
+  // Reset component state when user logs out
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsLoading(false)
+      setPassword('')
+      setError(null)
+    }
+  }, [isAuthenticated])
+
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
@@ -31,32 +40,61 @@ export function LoginScreen(): React.JSX.Element {
   }, [isAuthenticated, navigate, location.state])
 
   // Focus password input on mount and when component becomes visible
-  // Use multiple strategies to ensure DOM is fully rendered, especially after logout
-  useEffect(() => {
+  // Use useLayoutEffect to ensure focus is set before browser paint
+  // This is especially important after logout on Windows systems
+  useLayoutEffect((): (() => void) => {
     // Only focus if not authenticated (i.e., we're on the login screen)
     if (!isAuthenticated) {
-      // Use requestAnimationFrame to wait for next paint, then setTimeout for DOM stability
-      // This ensures the input is fully rendered and focusable, especially after logout
+      let retryCount = 0
+      const maxRetries = 5
+      let timeoutId: NodeJS.Timeout | null = null
+
       const focusInput = (): void => {
         const input = passwordInputRef.current
         if (input) {
-          // Check if input is actually visible and focusable
-          if (input.offsetParent !== null && !input.disabled) {
-            input.focus()
+          const isVisible = input.offsetParent !== null
+          const isEnabled = !input.disabled
+          const rect = input.getBoundingClientRect()
+          const isInViewport = rect.height > 0 && rect.width > 0
+
+          if (isVisible && isEnabled && isInViewport) {
+            try {
+              input.focus()
+              // Verify focus was successfully set
+              if (document.activeElement === input) {
+                console.log('[LoginScreen] Focus set successfully')
+                return
+              }
+            } catch (err) {
+              console.warn('[LoginScreen] Focus error:', err)
+            }
+          }
+
+          // If focus setting failed, retry with exponential backoff
+          if (retryCount < maxRetries) {
+            retryCount++
+            timeoutId = setTimeout(focusInput, 100 * retryCount)
           } else {
-            // If not ready, try again after a short delay
-            setTimeout(focusInput, 50)
+            console.warn('[LoginScreen] Failed to set focus after', maxRetries, 'retries')
           }
         }
       }
 
-      // Use requestAnimationFrame to wait for next paint cycle
+      // Use requestAnimationFrame to ensure we're in the next frame
       requestAnimationFrame(() => {
-        // Then use setTimeout to ensure DOM is stable
-        setTimeout(focusInput, 100)
+        timeoutId = setTimeout(focusInput, 50)
       })
 
-      // No cleanup needed - we want the focus to happen
+      // Cleanup function to clear timeout if component unmounts
+      return () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+      }
+    }
+    // Return empty cleanup function when authenticated
+    return () => {
+      // No cleanup needed when authenticated
     }
   }, [isAuthenticated]) // Re-focus when auth state changes (e.g., after logout)
 
@@ -103,6 +141,14 @@ export function LoginScreen(): React.JSX.Element {
     }
   }
 
+  // Handle click on input container to ensure focus
+  const handleInputContainerClick = (): void => {
+    const input = passwordInputRef.current
+    if (input && !input.disabled) {
+      input.focus()
+    }
+  }
+
   return (
     <div className="flex justify-center min-h-screen w-full relative z-10 px-8 py-20">
       <div className="w-full max-w-md">
@@ -129,7 +175,7 @@ export function LoginScreen(): React.JSX.Element {
               <label htmlFor="password" className="block text-lg font-semibold text-gray-800 mb-2">
                 密码
               </label>
-              <div className="relative">
+              <div className="relative" onClick={handleInputContainerClick}>
                 <input
                   ref={passwordInputRef}
                   id="password"
@@ -141,6 +187,7 @@ export function LoginScreen(): React.JSX.Element {
                   className="w-full px-4 py-4 pr-12 text-xl rounded-xl border-2 border-yellow-300 focus:border-yellow-400 focus:outline-none transition-colors duration-200 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   placeholder="请输入密码"
                   autoComplete="current-password"
+                  autoFocus
                 />
                 <button
                   type="button"
