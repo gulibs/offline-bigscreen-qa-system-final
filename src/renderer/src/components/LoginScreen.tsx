@@ -21,15 +21,6 @@ export function LoginScreen(): React.JSX.Element {
   const passwordInputRef = useRef<HTMLInputElement>(null)
   const { login, isAuthenticated } = useAuth()
 
-  // Reset component state when user logs out
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setIsLoading(false)
-      setPassword('')
-      setError(null)
-    }
-  }, [isAuthenticated])
-
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
@@ -39,25 +30,31 @@ export function LoginScreen(): React.JSX.Element {
     }
   }, [isAuthenticated, navigate, location.state])
 
-  // Focus password input on mount and when component becomes visible
-  // Use useLayoutEffect to ensure focus is set before browser paint
+  // Reset state and focus input on mount and when component becomes visible
+  // Use useLayoutEffect to ensure state is reset and focus is set before browser paint
   // This is especially important after logout on Windows systems
+  // Immediately sync reset state to prevent input from being disabled
   useLayoutEffect((): (() => void) => {
-    // Only focus if not authenticated (i.e., we're on the login screen)
-    if (!isAuthenticated) {
+    // Only execute on login page when not authenticated
+    if (location.pathname === '/admin/login' && !isAuthenticated) {
+      // Immediately sync reset state to ensure input is not disabled
+      setIsLoading(false)
+      setPassword('')
+      setError(null)
+
+      // Then set focus after state is reset
       let retryCount = 0
       const maxRetries = 5
       let timeoutId: NodeJS.Timeout | null = null
 
       const focusInput = (): void => {
         const input = passwordInputRef.current
-        if (input) {
+        if (input && !input.disabled) {
           const isVisible = input.offsetParent !== null
-          const isEnabled = !input.disabled
           const rect = input.getBoundingClientRect()
           const isInViewport = rect.height > 0 && rect.width > 0
 
-          if (isVisible && isEnabled && isInViewport) {
+          if (isVisible && isInViewport) {
             try {
               input.focus()
               // Verify focus was successfully set
@@ -92,11 +89,11 @@ export function LoginScreen(): React.JSX.Element {
         }
       }
     }
-    // Return empty cleanup function when authenticated
+    // Return empty cleanup function when not on login page or authenticated
     return () => {
-      // No cleanup needed when authenticated
+      // No cleanup needed
     }
-  }, [isAuthenticated]) // Re-focus when auth state changes (e.g., after logout)
+  }, [isAuthenticated, location.pathname]) // Re-focus when auth state or route changes
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
@@ -142,10 +139,24 @@ export function LoginScreen(): React.JSX.Element {
   }
 
   // Handle click on input container to ensure focus
-  const handleInputContainerClick = (): void => {
+  // If input is disabled, force enable it first
+  const handleInputContainerClick = (e: React.MouseEvent): void => {
+    // Stop event propagation to avoid triggering other click events
+    e.stopPropagation()
+
     const input = passwordInputRef.current
-    if (input && !input.disabled) {
-      input.focus()
+    if (input) {
+      // If input is disabled, immediately enable it
+      if (input.disabled) {
+        setIsLoading(false)
+        // Wait for state update then focus
+        setTimeout(() => {
+          input.focus()
+        }, 0)
+      } else {
+        // Input is already enabled, focus immediately
+        input.focus()
+      }
     }
   }
 
